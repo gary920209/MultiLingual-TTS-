@@ -1,0 +1,149 @@
+[abk] Abkhazian
+[afr] Afrikaans
+[amh] Amharic
+[ami] Amis
+[ara] Arabic
+[asm] Assamese
+[ast] Asturian
+[aze] Azerbaijani
+[azz] Highland Puebla Nahuatl
+[bak] Bashkir
+[ban] Balinese
+[bas] Basa (Cameroon)
+[bel] Belarusian
+[ben] Bengali
+[bos] Bosnian
+[bre] Breton
+[btk] Batak
+[bul] Bulgarian
+[cat] Catalan
+[ceb] Cebuano
+[ces] Czech
+[chv] Chuvash
+[ckb] Central Kurdish
+[cmn] Mandarin Chinese
+[cnh] Hakha Chin
+[cym] Welsh
+[dan] Danish
+[deu] German
+[div] Dhivehi
+[ell] Modern Greek (1453-)
+[eng] English
+[epo] Esperanto
+[est] Estonian
+[eus] Basque
+[fas] Persian
+[fil] Filipino
+[fin] Finnish
+[fra] French
+[frr] Northern Frisian
+[ful] Fulah
+[gle] Irish
+[glg] Galician
+[grn] Guarani
+[guj] Gujarati
+[hat] Haitian
+[hau] Hausa
+[heb] Hebrew
+[hin] Hindi
+[hrv] Croatian
+[hsb] Upper Sorbian
+[hun] Hungarian
+[hye] Armenian
+[ibo] Igbo
+[ina] Interlingua (International Auxiliary Language Association)
+[ind] Indonesian
+[isl] Icelandic
+[ita] Italian
+[jav] Javanese
+[jpn] Japanese
+[kab] Kabyle
+[kam] Kamba (Kenya)
+[kan] Kannada
+[kat] Georgian
+[kaz] Kazakh
+[kea] Kabuverdianu
+[khm] Khmer
+[kin] Kinyarwanda
+[kir] Kirghiz
+[kmr] Northern Kurdish
+[kor] Korean
+[lao] Lao
+[lav] Latvian
+[lga] Lungga
+[lin] Lingala
+[lit] Lithuanian
+[ltz] Luxembourgish
+[lug] Ganda
+[luo] Luo (Kenya and Tanzania)
+[mal] Malayalam
+[mar] Marathi
+[mhr] Eastern Mari
+[mkd] Macedonian
+[mlt] Maltese
+[mon] Mongolian
+[mri] Maori
+[mrj] Western Mari
+[msa] Malay 
+[mya] Burmese
+[myv] Erzya
+[nan] Min Nan Chinese
+[nbl] South Ndebele
+[nep] Nepali 
+[nld] Dutch
+[nod] Northern Thai
+[nso] Pedi
+[nya] Nyanja
+[oci] Occitan (post 1500)
+[ori] Oriya / Odia
+[orm] Oromo
+[pan] Panjabi
+[pol] Polish
+[por] Portuguese
+[pus] Pushto
+[que] Quechua
+[ron] Romanian
+[rus] Russian
+[sah] Yakut
+[sin] Sinhala
+[skr] Saraiki
+[slk] Slovak
+[slv] Slovenian
+[sna] Shona
+[snd] Sindhi
+[som] Somali
+[sot] Southern Sotho
+[sou] Southern Thai
+[spa] Spanish
+[srp] Serbian
+[ssw] Swati
+[sun] Sundanese
+[swa] Swahili
+[swe] Swedish
+[tam] Tamil
+[tat] Tatar
+[tel] Telugu
+[tgk] Tajik
+[tgl] Tagalog
+[tha] Thai
+[tok] Toki Pona
+[tos] Highland Totonac
+[tpi] Tok Pisin
+[trv] Sediq
+[tsn] Tswana
+[tso] Tsonga
+[tts] Northeastern Thai
+[tur] Turkish
+[uig] Uighur
+[ukr] Ukrainian
+[umb] Umbundu
+[urd] Urdu
+[uzb] Uzbek
+[ven] Venda
+[vie] Vietnamese
+[wol] Wolof
+[xho] Xhosa
+[xty] Yoloxochitl Mixtec
+[yor] Yoruba
+[yue] Yue Chinese
+[zul] Zulu
