@@ -253,6 +253,64 @@ def encode_dataset(batch, processor, all=False, phonemize=False, backend=None, s
         batch["labels"] = batch["labels"][:448]
     return batch
 
+# New functions:
+
+def save_model_state(model, processor: WhisperProcessor, output_dir):
+    """
+    Save model state including tokenizer, embeddings and LoRA weights in one place.
+    
+    Args:
+        model: The Whisper_Modified model
+        processor: WhisperProcessor instance
+        output_dir: Directory to save everything
+    """
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 1. Save the processor/tokenizer
+    processor.save_pretrained(output_dir)
+    
+    # 2. Save language embeddings if they exist
+    if hasattr(model, 'weight') and model.weight is not None:
+        torch.save({
+            'weight': model.weight,
+            'tokens_embed': model.tokens_embed
+        }, os.path.join(output_dir, 'language_embeddings.pt'))
+    
+    # 3. Save LoRA weights in the same directory
+    model.save_pretrained(output_dir)
+
+def load_model_state(output_dir):
+    """
+    Load the complete model state.
+    
+    Args:
+        output_dir: Directory where model was saved
+        model_class: Usually Whisper_Modified
+        processor_class: Usually WhisperProcessor
+    """
+    
+    # 1. Load processor/tokenizer
+    processor = WhisperProcessor.from_pretrained(output_dir, task="transcribe")
+    
+    # 2. Load embeddings if they exist
+    embeddings_path = os.path.join(output_dir, 'language_embeddings.pt')
+    embeddings = None
+    if os.path.exists(embeddings_path):
+        embeddings = torch.load(embeddings_path)
+    
+    # 3. Initialize model with embeddings
+    model = Whisper_Modified.from_pretrained(
+        pretrained_model_name_or_path=output_dir,
+        new_embedding=embeddings['weight'] if embeddings else None,
+        language_tokens=embeddings['tokens_embed'] if embeddings else None
+    )
+    
+    # 4. Load LoRA weights
+    model = PeftModel.from_pretrained(model, output_dir)
+    
+    return model, processor
+
 class SavePeftModelCallback(TrainerCallback):
     def on_save(
         self,
@@ -269,6 +327,15 @@ class SavePeftModelCallback(TrainerCallback):
         pytorch_model_path = os.path.join(checkpoint_folder, "pytorch_model.bin")
         if os.path.exists(pytorch_model_path):
             os.remove(pytorch_model_path)
+        return control
+    
+class SaveAllCallback(TrainerCallback):
+    def on_save(self, args, state, control, **kwargs):
+        checkpoint_folder = os.path.join(
+            args.output_dir, 
+            f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}"
+        )
+        save_model_state(kwargs["model"], kwargs["processor"], checkpoint_folder)
         return control
 
 def load_peft_model_from_hub(peft_model_id):
@@ -482,7 +549,7 @@ class Whisper_Modified(WhisperForConditionalGeneration):
         non_lang_mask = torch.ones_like(logits[0], dtype=torch.bool)
         lang_id = list(generation_config.lang_to_id.values())
         if all:
-            lang_id.extend([i for i in range(51865, 51895)])
+            lang_id.extend([i for i in range(51865, 51925)])
         else:
             lang_id.append(51865)
         non_lang_mask[lang_id] = False
@@ -534,7 +601,7 @@ def experiment(input_arg, model, processor, data_collator, data_train, data_test
         train_dataset=data_train,
         # eval_dataset=data_test,
         tokenizer=processor.feature_extractor,
-        callbacks=[SavePeftModelCallback],
+        callbacks=[SaveAllCallback],
     )
     model.config.use_cache = False  
 
@@ -670,7 +737,7 @@ def main(arg=None):
     if all:
         lang_distribution = weight_train
         language_id_tokens = list(model.generation_config.lang_to_id.values())
-        language_id_tokens.extend([i for i in range(51865, 51895)])
+        language_id_tokens.extend([i for i in range(51865, 51925)])
         for key, value in lang_distribution.items():
             lang_distribution[key] = lang_distribution[key][lang_distribution[key].nonzero(as_tuple=True)].tolist()
         model = Whisper_Modified.from_pretrained(pretrained_model_name_or_path=input_arg["model_config"], new_embedding=lang_distribution, language_tokens=language_id_tokens)
