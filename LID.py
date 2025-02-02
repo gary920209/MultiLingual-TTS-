@@ -4,12 +4,21 @@ import soundfile as sf
 import argparse
 from tqdm import tqdm
 import csv
+import random
 
 # Returns audio data as numpy array and sample rate
 
 
 def language_identification(audio, sr, processor, model):
 
+    """
+    Function to identify the language of an audio file
+    Please initialize the model and processor before calling this function:
+    
+    processor = AutoFeatureExtractor.from_pretrained(model_id)
+    model = Wav2Vec2ForSequenceClassification.from_pretrained(model_id)
+    """
+    
     inputs = processor(audio, sampling_rate=sr, return_tensors="pt")
 
     with torch.no_grad():
@@ -38,7 +47,9 @@ if __name__ == "__main__":
     with open(args.input_csv, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
         next(reader)
-        for row in reader:
+        rows = list(reader)
+        random.shuffle(rows)
+        for row in tqdm(rows):
             path = row[0]
             audio, sr = sf.read(path)
             lang = language_identification(audio, sr, processor, model)
@@ -46,5 +57,8 @@ if __name__ == "__main__":
             if lang == label:
                 correct += 1
             total += 1
+            
+            if total > 2000:
+                break
     
     print(f"Accuracy: {correct/total}")
