@@ -78,14 +78,16 @@ if __name__ == "__main__":
         for row in tqdm(rows):
             path = row[0]
             label = path.split('/')[-3]
+            if label not in lang_record:
+                lang_record[label] = [0, 0]
+
             if lang_record[label][1] >= 50:
                 continue
             
             audio, sr = sf.read(path)
             pred_lid = language_identification(audio, sr, processor, model, lang_list)
             
-            if label not in lang_record:
-                lang_record[label] = [0, 0]
+            
             if pred_lid == label:
                 correct += 1
                 lang_record[label][0] += 1
