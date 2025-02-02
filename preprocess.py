@@ -60,6 +60,10 @@ def process_line(line):
     # Construct the new path
     if id_part.startswith('cv_'):
         path = f"{base_path}/commonvoice/{lang}/wav/{id_part}.wav"
+    elif id_part.startswith('googlei18n-asr'):
+        path = f"{base_path}/googlei18n_asr/{lang}/wav/{id_part}.wav"
+    elif id_part.startswith('googlei18n-tts'):
+        path = f"{base_path}/googlei18n_tts/{lang}/wav/{id_part}.wav"
     else:
         dataset = id_part.split('_')[0]
         path = f"{base_path}/{dataset}/{lang}/wav/{id_part}.wav"
