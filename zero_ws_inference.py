@@ -521,19 +521,20 @@ def experiment(input_arg, model, processor, lid_model, lid_processor, data_colla
     
     pred_lid_list = []
     label_lid_list = []
-    
+    print(input_arg)
     lang_list_file = input_arg.get("lang_list", None)
+    print(lang_list_file)
     if lang_list_file:
         with open(lang_list_file, "r") as f:
             lang_list_data = json.load(f)
         lang_list = [lang["code"] for lang in lang_list_data]
-
+    print(lang_list)
     for step, batch in enumerate(tqdm(eval_dataloader)):
         with torch.no_grad():
             # TODO: Add language identification if there isn't language information
             
             pred_lang = language_identification(
-                batch["input_features"].to("cuda"), 
+                batch["input_features"].squeeze(1).squeeze(1).to("cuda"), 
                 16000, 
                 lid_processor, 
                 lid_model, 
