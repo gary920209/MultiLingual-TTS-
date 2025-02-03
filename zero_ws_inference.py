@@ -1,15 +1,19 @@
 import copy
+import json
 import sys
 
 import nlp2
 from datasets import load_dataset
 from transformers import WhisperForConditionalGeneration, WhisperModel, WhisperConfig, Seq2SeqTrainingArguments
 from transformers import WhisperProcessor
+from transformers import Wav2Vec2ForSequenceClassification, AutoFeatureExtractor
+
 from datasets import load_from_disk
 from transformers.activations import ACT2FN
 from module.args import parse_args
 from module.data_processing import DataCollatorSpeechSeq2SeqWithPadding
 from module.metric import cer_cal, wer_cal
+from module.LID import language_identification
 
 from datetime import datetime
 
@@ -54,6 +58,8 @@ def prepare_dataset_whisper(batch, feature_extractor, audio_feature_key):
         batch["labels"] = batch["sentence"]
     else:
         batch["labels"] = batch["text"]
+        
+    batch["lid"] = path.split("/")[-3]
     return batch
 
 def get_weight(processor, model, data_train):
@@ -84,23 +90,6 @@ def encode_dataset(batch, processor, phonemize=False, backend=None, separator=No
         batch["labels"] = batch["labels"][:448]
     return batch
 
-class SavePeftModelCallback(TrainerCallback):
-    def on_save(
-        self,
-        args: TrainingArguments,
-        state: TrainerState,
-        control: TrainerControl,
-        **kwargs,
-    ):
-        checkpoint_folder = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
-
-        peft_model_path = os.path.join(checkpoint_folder, "adapter_model")
-        kwargs["model"].save_pretrained(peft_model_path)
-
-        pytorch_model_path = os.path.join(checkpoint_folder, "pytorch_model.bin")
-        if os.path.exists(pytorch_model_path):
-            os.remove(pytorch_model_path)
-        return control
 
 def load_peft_model_from_hub(peft_model_id):
     peft_config = PeftConfig.from_pretrained(peft_model_id)
@@ -112,68 +101,6 @@ def load_peft_model_from_hub(peft_model_id):
     print("Load model from hub successfully.")
     return model
 
-# for LrRescheduleTrainer
-from functools import partial
-from torch.optim.lr_scheduler import LambdaLR
-
-class LrRescheduleTrainer(Seq2SeqTrainer):
-    def __init__(self, specified_epoch, total_epoch, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        # Add custom attributes here
-        self.total_epoch = total_epoch
-        self.specified_epoch = 0
-        
-    def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):
-        """
-        Setup the scheduler. The optimizer of the trainer must have been set up either before this method is called or
-        passed as an argument.
-
-        Args:
-            num_training_steps (int): The number of training steps to do.
-        """
-        
-        self.lr_scheduler = self.get_linear_schedule_with_warmup(
-            optimizer=self.optimizer if optimizer is None else optimizer,
-            num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
-            num_training_steps=num_training_steps,
-        )
-        return self.lr_scheduler
-
-    def get_linear_schedule_with_warmup(self, optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
-        """
-        Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0, after
-        a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
-
-        Args:
-            optimizer ([`~torch.optim.Optimizer`]):
-                The optimizer for which to schedule the learning rate.
-            num_warmup_steps (`int`):
-                The number of steps for the warmup phase.
-            num_training_steps (`int`):
-                The total number of training steps.
-            last_epoch (`int`, *optional*, defaults to -1):
-               The index of the last epoch when resuming training. 
-
-        Return:
-            `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
-        """
-
-        lr_lambda = partial(
-            self._get_linear_schedule_with_warmup_lr_lambda,
-            num_warmup_steps=num_warmup_steps,
-            num_training_steps=num_training_steps,
-        )
-        return LambdaLR(optimizer, lr_lambda, last_epoch)
-
-    def _get_linear_schedule_with_warmup_lr_lambda(self, current_step: int, *, num_warmup_steps: int, num_training_steps: int):
-        # The only difference
-        current_step += num_training_steps * self.specified_epoch
-        num_training_steps *= self.total_epoch
-
-        if current_step < num_warmup_steps:
-            return float(current_step) / float(max(1, num_warmup_steps))
-        return max(0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
 
 class Whisper_Modified(WhisperForConditionalGeneration):
     def generate(
@@ -578,7 +505,7 @@ class Whisper_Modified(WhisperForConditionalGeneration):
                 "decoder_position_ids": decoder_position_ids,
             }
 
-def experiment(input_arg, model, processor, data_collator, data_train, data_test, time, output_dir, weight):
+def experiment(input_arg, model, processor, lid_model, lid_processor, data_collator, data_train, data_test, time, output_dir, weight):
     ###################
     #     Evaluate    #
     ###################
@@ -586,13 +513,32 @@ def experiment(input_arg, model, processor, data_collator, data_train, data_test
 
     model.eval()
     model = model.to("cuda")
+    lid_model.eval()
+    lid_model = lid_model.to("cuda")
     label_list = []
     pred_list = []
     pred_results = []
+    
+    pred_lid_list = []
+    label_lid_list = []
+    
+    lang_list_file = input_arg.get("lang_list", None)
+    if lang_list_file:
+        with open(lang_list_file, "r") as f:
+            lang_list_data = json.load(f)
+        lang_list = [lang["code"] for lang in lang_list_data]
 
     for step, batch in enumerate(tqdm(eval_dataloader)):
         with torch.no_grad():
             # TODO: Add language identification if there isn't language information
+            
+            pred_lang = language_identification(
+                batch["input_features"].to("cuda"), 
+                16000, 
+                lid_processor, 
+                lid_model, 
+                lang_list=lang_list)
+            
             if weight != None:
                 lang_distribution = weight.squeeze()
             else:
@@ -615,19 +561,24 @@ def experiment(input_arg, model, processor, data_collator, data_train, data_test
             pred_str = processor.tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
             label_str = processor.tokenizer.batch_decode(labels, skip_special_tokens=True)
 
-            pred_result = [[l, p, cer_cal([l], [p])] for l, p in zip(label_str, pred_str)]
+            pred_result = [[l, p, cer_cal([l], [p]), true_lid, pred_lid] for l, p, true_lid, pred_lid in zip(label_str, pred_str, batch["lid"], pred_lang)]
             pred_results += pred_result
 
             pred_list += pred_str
             label_list += label_str
             pred_str = (" ").join(pred_str)
+            
+            pred_lid_list += pred_lang
+            label_lid_list += batch["lid"]
+            
         del generated_tokens, labels, batch
         gc.collect()
     nlp2.write_csv(pred_results, f'{output_dir}/pred.csv')
     cer = cer_cal(label_list, pred_list)
     wer = wer_cal(label_list, pred_list)
+    lid_acc = sum([1 for l, p in zip(label_lid_list, pred_lid_list) if l == p]) / len(label_lid_list)
     print("********* Evaluation Result *********")
-    print(f"cer: {cer}, wer: {wer}")
+    print(f"cer: {cer}, wer: {wer}", f"lid_acc: {lid_acc}")
     print("*************************************")
     return model
 
@@ -668,6 +619,12 @@ def main(arg=None):
     model.config.suppress_tokens = []
     
     model.print_trainable_parameters()
+    
+    # LID model
+    lid_model_id = "facebook/mms-lid-4017"
+
+    lid_processor = AutoFeatureExtractor.from_pretrained(lid_model_id)
+    lid_model = Wav2Vec2ForSequenceClassification.from_pretrained(lid_model_id)
 
     ############
     #  Dataset #
@@ -698,6 +655,8 @@ def main(arg=None):
         input_arg,
         model,
         processor,
+        lid_model,
+        lid_processor,
         data_collator,
         None,
         data_test,
