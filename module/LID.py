@@ -26,7 +26,7 @@ def language_identification(audio, sr, processor, model: Wav2Vec2ForSequenceClas
     """
     
     inputs = processor(audio, sampling_rate=sr, return_tensors="pt")
-
+    inputs = {k: v.to(model.device) for k, v in inputs.items()}
     with torch.no_grad():
         outputs = model(**inputs).logits
     
@@ -40,7 +40,7 @@ def language_identification(audio, sr, processor, model: Wav2Vec2ForSequenceClas
             filtered_probs[label] = probs[i].item()
     
     # Get the most likely language from the filtered list
-    detected_lang = max(filtered_probs.items(), key=lambda x: x[1])[0]
+    detected_lang = max(filtered_probs.items(), key=lambda x: x[1])
     
     
     return detected_lang

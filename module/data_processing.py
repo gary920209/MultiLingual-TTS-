@@ -6,7 +6,7 @@ import torchaudio
 from transformers import Wav2Vec2Processor
 from transformers.models.whisper.modeling_whisper import shift_tokens_right
 from datasets import load_dataset, Audio
-
+import numpy as np
 
 def encode_dataset(batch, processor, phonemize=False, backend=None, separator=None):
     if not isinstance(batch["labels"], list):
@@ -135,7 +135,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             labels = labels[:, 1:]
 
         # Add raw_audio, lid, and labels to batch
-        batch["raw_audio"] = torch.tensor(np.array(raw_audio))
+        batch["raw_audio"] = torch.tensor(np.array(raw_audio)).squeeze()
         batch["lid"] = lid
         batch["labels"] = labels
         

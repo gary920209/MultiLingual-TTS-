@@ -44,17 +44,17 @@ import os
 def prepare_dataset_whisper(batch, feature_extractor, audio_feature_key):
     path = batch["path"]
     speech, sampling_rate = torchaudio.load(path)
-    batch["raw_audio"] = batch[audio_feature_key]
+    batch["raw_audio"] = speech.squeeze(0).numpy()
     if sampling_rate != "16_000" and sampling_rate != "16000" and sampling_rate != 16000:
         resampler = torchaudio.transforms.Resample(orig_freq=sampling_rate, new_freq=16_000)
         batch[audio_feature_key] = resampler.forward(speech.squeeze(0)).numpy()
     else:
         batch[audio_feature_key] = speech.squeeze(0).numpy()
-    
+
     # compute log-Mel input features from input audio array
     batch[audio_feature_key] = feature_extractor(batch[audio_feature_key], sampling_rate=16000).input_features[0]
     batch["lengths"] = len(batch[audio_feature_key])
-    # # encode target text to label ids
+
     # batch["labels"] = tokenizer(batch["sentence"]).input_ids
     if "sentence" in batch:
         batch["labels"] = batch["sentence"]
@@ -670,3 +670,4 @@ def main(arg=None):
 
 if __name__ == "__main__":
     main()
+
