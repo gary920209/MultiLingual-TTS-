@@ -48,6 +48,8 @@ def parse_args(args):
     parser.add_argument("--trainable", action="store_true")
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--repo_name", type=str)
+    parser.add_argument("--lang_list", type=str, help="Path to language list JSON file")
+    parser.add_argument("--base_dir", type=str, help="Base directory for the dataset")
 
     parser.add_argument("--specified_epoch", type=int, default=None, help="For project purpose")
     parser.add_argument("--total_epoch", type=int, default=5, help="For project purpose")
