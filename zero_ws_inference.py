@@ -44,11 +44,13 @@ import os
 def prepare_dataset_whisper(batch, feature_extractor, audio_feature_key):
     path = batch["path"]
     speech, sampling_rate = torchaudio.load(path)
-    if sampling_rate != "16_000" or sampling_rate != "16000":
+    batch["raw_audio"] = batch[audio_feature_key]
+    if sampling_rate != "16_000" and sampling_rate != "16000" and sampling_rate != 16000:
         resampler = torchaudio.transforms.Resample(orig_freq=sampling_rate, new_freq=16_000)
         batch[audio_feature_key] = resampler.forward(speech.squeeze(0)).numpy()
     else:
         batch[audio_feature_key] = speech.squeeze(0).numpy()
+    
     # compute log-Mel input features from input audio array
     batch[audio_feature_key] = feature_extractor(batch[audio_feature_key], sampling_rate=16000).input_features[0]
     batch["lengths"] = len(batch[audio_feature_key])
@@ -534,7 +536,7 @@ def experiment(input_arg, model, processor, lid_model, lid_processor, data_colla
             # TODO: Add language identification if there isn't language information
             
             pred_lang = language_identification(
-                batch["input_features"].squeeze(1).squeeze(1).to("cuda"), 
+                batch["raw_audio"].to("cuda"), 
                 16000, 
                 lid_processor, 
                 lid_model, 

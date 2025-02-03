@@ -115,40 +115,30 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     audio_feature_key: str = "input_features" 
     
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lengths and need different padding methods
-        # first treat the audio inputs by simply returning torch tensors
+        # Get raw audio and lid from features
+        raw_audio = [feature["raw_audio"] for feature in features]
+        lid = [feature["lid"] for feature in features]
         
-        # self.audio_feature_key = "input_ids" # for large-v2
-
-        # DEBUG
-        # print(f"self.audio_feature_key: {self.audio_feature_key}")
-        # print(features[0])
-        # print(f'features[0]["{self.audio_feature_key}"]')
-        # print(features[0][self.audio_feature_key])
-        # print(len(features[0][self.audio_feature_key]))
-        # print(len(features[0][self.audio_feature_key][0]))
-        
-
-        
-        
-        # input_features = [{self.audio_feature_key: feature[self.audio_feature_key]} for feature in features]
+        # Handle input features
         input_features = [{"input_features": feature[self.audio_feature_key]} for feature in features]
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
 
-        # get the tokenized label sequences
+        # Handle labels
         label_features = [{"input_ids": feature["labels"]} for feature in features]
-        # pad the labels to max length
         labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
 
-        # replace padding with -100 to ignore loss correctly
+        # Replace padding with -100 to ignore loss correctly
         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
 
-        # if bos token is appended in previous tokenization step,
-        # cut bos token here as it's append later anyways
+        # Cut bos token if present
         if (labels[:, 0] == self.processor.tokenizer.bos_token_id).all().cpu().item():
             labels = labels[:, 1:]
 
+        # Add raw_audio, lid, and labels to batch
+        batch["raw_audio"] = torch.tensor(np.array(raw_audio))
+        batch["lid"] = lid
         batch["labels"] = labels
+        
         return batch
 
 @dataclass
