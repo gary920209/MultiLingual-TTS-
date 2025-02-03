@@ -187,8 +187,8 @@ NEW_TOKEN_TO_ID = {
     "zul": 51924
 }
 
-def prepare_dataset_whisper(batch, feature_extractor, audio_feature_key):
-    path = batch["path"]
+def prepare_dataset_whisper(batch, base_dir, feature_extractor, audio_feature_key):
+    path = os.path.join(base_dir, batch["path"])
     speech, sampling_rate = torchaudio.load(path)
     if sampling_rate != "16_000" or sampling_rate != "16000":
         resampler = torchaudio.transforms.Resample(orig_freq=sampling_rate, new_freq=16_000)
@@ -665,6 +665,8 @@ def main(arg=None):
     input_arg["model_config"] = f"openai/whisper-{size}"
     input_arg["group_by_length"] = True
     input_arg["cache_dir"] = "~/.cache"
+    base_dir = input_arg.get("base_dir", "./data")
+    input_arg["base_dir"] = base_dir
     dropout = input_arg.get("dropout", 0.0)
     all = input_arg.get("all", False)
 
@@ -677,7 +679,11 @@ def main(arg=None):
     )
     audio_feature_key = "input_ids"
     if all:
-        special_tokens_dict = {'additional_special_tokens': ['<|ast|>', '<|ceb|>', '<|ckb|>', '<|fil|>', '<|ful|>', '<|gle|>', '<|ibo|>', '<|kam|>', '<|kea|>', '<|kir|>', '<|lug|>', '<|luo|>', '<|msa|>', '<|mya|>', '<|nbl|>', '<|nso|>', '<|nya|>', '<|ori|>', '<|orm|>', '<|pan|>', '<|pus|>', '<|sot|>', '<|ssw|>', '<|tsn|>', '<|tso|>', '<|umb|>', '<|ven|>', '<|wol|>', '<|xho|>', '<|zul|>'] + processor.tokenizer.all_special_tokens}
+        special_tokens_list = []
+        for key, value in NEW_TOKEN_TO_ID.items():
+            if value >= 51865:
+                special_tokens_list.append(f"<|{key}|>")
+        special_tokens_dict = {'additional_special_tokens': special_tokens_list + processor.tokenizer.all_special_tokens}
     else:
         special_tokens_dict = {'additional_special_tokens': ['<|new|>'] + processor.tokenizer.all_special_tokens}
     num_added_toks = processor.tokenizer.add_special_tokens(special_tokens_dict)
@@ -705,12 +711,12 @@ def main(arg=None):
         data_files=input_arg["custom_set_train"],
         cache_dir=input_arg["cache_dir"],
     )
-    dataset = dataset.filter(lambda e: nlp2.is_file_exist(e["path"]))
+    dataset = dataset.filter(lambda e: nlp2.is_file_exist(os.path.join(base_dir, e["path"])))
     data_train = dataset["train"]
     data_train = data_train.map(
         prepare_dataset_whisper,
         num_proc=1,
-        fn_kwargs={"feature_extractor": processor.feature_extractor, "audio_feature_key": audio_feature_key},
+        fn_kwargs={"base_dir": base_dir, "feature_extractor": processor.feature_extractor, "audio_feature_key": audio_feature_key},
     )
     data_train = data_train.map(encode_dataset, fn_kwargs={"processor": processor, "all": all})
     weight_train = get_weight(processor, model, data_train, all)
@@ -722,13 +728,13 @@ def main(arg=None):
         cache_dir=input_arg["cache_dir"],
         # cache_dir=None,
     )
-    dataset_test = dataset_test.filter(lambda e: nlp2.is_file_exist(e["path"]))
+    dataset_test = dataset_test.filter(lambda e: nlp2.is_file_exist(os.path.join(base_dir, e["path"])))
     data_test = dataset_test["train"]
 
     data_test = data_test.map(
         prepare_dataset_whisper,
         num_proc=1,
-        fn_kwargs={"feature_extractor": processor.feature_extractor, "audio_feature_key": audio_feature_key},
+        fn_kwargs={"base_dir": base_dir, "feature_extractor": processor.feature_extractor, "audio_feature_key": audio_feature_key},
     )
 
     data_test = data_test.map(encode_dataset, fn_kwargs={"processor": processor, "all": all})

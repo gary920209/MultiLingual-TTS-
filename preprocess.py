@@ -2,6 +2,7 @@ import csv
 import re
 import unicodedata
 import argparse
+import os
 
 def remove_punctuation(sentence):
     new_sentence = ""
@@ -55,18 +56,18 @@ def process_line(line):
     normalized_text = normalize_text(text, lang)
     
     # Base path from template
-    base_path = "/work/dlhlpgp7/mlsuperb2_challenge/data"
+    # base_path = "/work/dlhlpgp7/mlsuperb2_challenge/data"
     
     # Construct the new path
     if id_part.startswith('cv_'):
-        path = f"{base_path}/commonvoice/{lang}/wav/{id_part}.wav"
+        path = os.path.join("commonvoice", lang, "wav", f"{id_part}.wav")
     elif id_part.startswith('googlei18n-asr'):
-        path = f"{base_path}/googlei18n_asr/{lang}/wav/{id_part}.wav"
+        path = os.path.join("googlei18n_asr", lang, "wav", f"{id_part}.wav")
     elif id_part.startswith('googlei18n-tts'):
-        path = f"{base_path}/googlei18n_tts/{lang}/wav/{id_part}.wav"
+        path = os.path.join("googlei18n_tts", lang, "wav", f"{id_part}.wav")
     else:
         dataset = id_part.split('_')[0]
-        path = f"{base_path}/{dataset}/{lang}/wav/{id_part}.wav"
+        path = os.path.join(dataset, lang, "wav", f"{id_part}.wav")
     
     return [path, normalized_text]
 
