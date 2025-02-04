@@ -3,6 +3,7 @@ exp_name="fine_tune_trainable_with_new_token_corrected"
 size=large-v2
 dir=data/
 output_dir=outputs/$exp_name/all
+mkdir -p $output_dir
 python3 new_ws_finetune.py \
     --size $size \
     --batch 1 \

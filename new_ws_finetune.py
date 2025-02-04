@@ -126,65 +126,56 @@ NEW_TOKEN_TO_ID = {
     "jav": 50356,
     "cmn": 50260,
     "abk": 51865,
-    "ami": 51866,
-    "ast": 51867,
-    "ban": 51868,
-    "bas": 51869,
-    "btk": 51870,
-    "ceb": 51871,
-    "ckb": 51872,
-    "chv": 51873,
-    "div": 51874,
-    "mhr": 51875,
-    "myv": 51876,
-    "epo": 51877,
-    "ful": 51878,
-    "lug": 51879,
-    "grn": 51880,
-    "cnh": 51881,
-    "azz": 51882,
-    "tos": 51883,
-    "ibo": 51884,
-    "ina": 51885,
-    "gle": 51886,
-    "kea": 51887,
-    "kab": 51888,
-    "kam": 51889,
-    "kin": 51890,
-    "kir": 51891,
-    "lga": 51892,
-    "luo": 51893,
-    "nan": 51894,
-    "tts": 51895,
-    "frr": 51896,
-    "kmr": 51897,
-    "nod": 51898,
-    "nya": 51899,
-    "ori": 51900,
-    "orm": 51901,
-    "nso": 51902,
-    "que": 51903,
-    "skr": 51904,
-    "trv": 51905,
-    "nbl": 51906,
-    "sot": 51907,
-    "sou": 51908,
-    "ssw": 51909,
-    "tpi": 51910,
-    "tok": 51911,
-    "tso": 51912,
-    "tsn": 51913,
-    "uig": 51914,
-    "umb": 51915,
-    "hsb": 51916,
-    "ven": 51917,
-    "mrj": 51918,
-    "wol": 51919,
-    "xho": 51920,
-    "sah": 51921,
-    "xty": 51922,
-    "yue": 51923,
-    "zul": 51924
+    "ast": 51866,
+    "bas": 51867,
+    "ceb": 51868,
+    "ckb": 51869,
+    "chv": 51870,
+    "div": 51871,
+    "mhr": 51872,
+    "myv": 51873,
+    "epo": 51874,
+    "ful": 51875,
+    "lug": 51876,
+    "grn": 51877,
+    "cnh": 51878,
+    "azz": 51879,
+    "tos": 51880,
+    "ibo": 51881,
+    "ina": 51882,
+    "gle": 51883,
+    "kea": 51884,
+    "kab": 51885,
+    "kam": 51886,
+    "kin": 51887,
+    "kir": 51888,
+    "lga": 51889,
+    "luo": 51890,
+    "nan": 51891,
+    "frr": 51892,
+    "kmr": 51893,
+    "nya": 51894,
+    "ori": 51895,
+    "orm": 51896,
+    "nso": 51897,
+    "skr": 51898,
+    "nbl": 51899,
+    "sot": 51900,
+    "ssw": 51901,
+    "tok": 51902,
+    "tso": 51903,
+    "tsn": 51904,
+    "uig": 51905,
+    "umb": 51906,
+    "hsb": 51907,
+    "ven": 51908,
+    "mrj": 51909,
+    "wol": 51910,
+    "xho": 51911,
+    "sah": 51912,
+    "xty": 51913,
+    "yue": 51914,
+    "zul": 51915
 }
 
 def prepare_dataset_whisper(batch, base_dir, feature_extractor, audio_feature_key):
@@ -420,8 +411,19 @@ class Whisper_Modified(WhisperForConditionalGeneration):
             self.weight = None
         elif isinstance(new_embedding, dict):
             new_lang_tokens = {k: v for k, v in new_embedding.items() if int(k) >= 51865}
-            init_tensor = torch.zeros((len(new_lang_tokens), len(new_embedding[list(new_embedding.keys())[0]])))
+            init_tensor = torch.zeros((len(new_lang_tokens), len(new_lang_tokens[list(new_lang_tokens.keys())[0]])))
+            print(init_tensor.shape)
+            print(new_lang_tokens.keys())
+            first_key = list(new_lang_tokens.keys())[0]
+            print(f"First value length: {len(new_lang_tokens[first_key])}")
+            print(f"First key: {first_key}")
+            second_key = list(new_lang_tokens.keys())[1]
+            print(f"Second value length: {len(new_lang_tokens[second_key])}")
+            print(f"Second key: {second_key}")
+            print(f"A few first key values: {new_lang_tokens[first_key][:10]}")
+            print(f"A few secodn key values: {new_lang_tokens[second_key][:10]}")
             for key, value in new_lang_tokens.items():
+                print(key)
                 init_tensor[int(key) - 51865] = torch.tensor(value).unsqueeze(0)
             self.weight = nn.Parameter(init_tensor)
             # init_tensor = torch.zeros((len(new_embedding.keys()), len(new_embedding[51865])))
@@ -554,7 +556,7 @@ class Whisper_Modified(WhisperForConditionalGeneration):
         non_lang_mask = torch.ones_like(logits[0], dtype=torch.bool)
         lang_id = list(generation_config.lang_to_id.values())
         if all:
-            lang_id.extend([i for i in range(51865, 51925)])
+            lang_id.extend([i for i in range(51865, 51916)])
         else:
             lang_id.append(51865)
         non_lang_mask[lang_id] = False
@@ -748,7 +750,7 @@ def main(arg=None):
     if all:
         lang_distribution = weight_train
         language_id_tokens = list(model.generation_config.lang_to_id.values())
-        language_id_tokens.extend([i for i in range(51865, 51925)])
+        language_id_tokens.extend([i for i in range(51865, 51916)])
         for key, value in lang_distribution.items():
             lang_distribution[key] = lang_distribution[key][lang_distribution[key].nonzero(as_tuple=True)].tolist()
         model = Whisper_Modified.from_pretrained(pretrained_model_name_or_path=input_arg["model_config"], new_embedding=lang_distribution, language_tokens=language_id_tokens)
@@ -782,3 +784,4 @@ def main(arg=None):
 
 if __name__ == "__main__":
     main()
+

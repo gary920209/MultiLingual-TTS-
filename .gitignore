@@ -2,7 +2,7 @@
 *.csv
 test/
 data.zip
-
+data
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

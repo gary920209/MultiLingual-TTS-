@@ -115,9 +115,11 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     audio_feature_key: str = "input_features" 
     
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # Get raw audio and lid from features
-        raw_audio = [feature["raw_audio"] for feature in features]
-        lid = [feature["lid"] for feature in features]
+
+        if "raw_audio" in features[0]:
+            # Get raw audio and lid from features
+            raw_audio = [feature["raw_audio"] for feature in features]
+            lid = [feature["lid"] for feature in features]
         
         # Handle input features
         input_features = [{"input_features": feature[self.audio_feature_key]} for feature in features]
@@ -135,8 +137,9 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             labels = labels[:, 1:]
 
         # Add raw_audio, lid, and labels to batch
-        batch["raw_audio"] = torch.tensor(np.array(raw_audio)).squeeze()
-        batch["lid"] = lid
+        if "raw_audio" in features[0]:
+            batch["raw_audio"] = torch.tensor(np.array(raw_audio)).squeeze()
+            batch["lid"] = lid
         batch["labels"] = labels
         
         return batch
@@ -190,3 +193,4 @@ class DataCollatorWeightedSum:
             batch["weight"]=summation
 
         return batch
+
