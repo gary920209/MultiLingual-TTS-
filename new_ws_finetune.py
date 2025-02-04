@@ -419,10 +419,15 @@ class Whisper_Modified(WhisperForConditionalGeneration):
         if new_embedding == None:
             self.weight = None
         elif isinstance(new_embedding, dict):
-            init_tensor = torch.zeros((len(new_embedding.keys()), len(new_embedding[51865])))
-            for key, value in new_embedding.items():
+            new_lang_tokens = {k: v for k, v in new_embedding.items() if int(k) >= 51865}
+            init_tensor = torch.zeros((len(new_lang_tokens), len(new_embedding[list(new_embedding.keys())[0]])))
+            for key, value in new_lang_tokens.items():
                 init_tensor[int(key) - 51865] = torch.tensor(value).unsqueeze(0)
             self.weight = nn.Parameter(init_tensor)
+            # init_tensor = torch.zeros((len(new_embedding.keys()), len(new_embedding[51865])))
+            # for key, value in new_embedding.items():
+            #     init_tensor[int(key) - 51865] = torch.tensor(value).unsqueeze(0)
+            # self.weight = nn.Parameter(init_tensor)
         else:
             self.weight = nn.Parameter(torch.tensor(new_embedding))
         self.tokens_embed = torch.tensor(language_tokens).to("cuda") if language_tokens is not None else None
@@ -462,9 +467,9 @@ class Whisper_Modified(WhisperForConditionalGeneration):
             token_embeddings = embedding(self.tokens_embed)
             summation = embedding(decoder_input_ids)
             if len(self.weight.shape) > 1:
-                if labels is not None:
+                if labels is not None and decoder_input_ids[0][2] >= 51865:
                     summation[:,2,:] = torch.matmul(self.weight[decoder_input_ids[0][2] - 51865], token_embeddings)
-                else:
+                elif decoder_input_ids[0][1] >= 51865:
                     summation[:,1,:] = torch.matmul(self.weight[decoder_input_ids[0][1] - 51865], token_embeddings)
             else:
                 if labels is not None:
