@@ -55,4 +55,4 @@ for dir in data/ml_superb/sixth_edition/languages/*;do
             --corpus_wise \
             --output_dir $output_dir > $output_dir/output.log
     fi
-done
+
