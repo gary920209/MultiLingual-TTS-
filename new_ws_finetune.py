@@ -36,6 +36,9 @@ from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from peft import LoraConfig, PeftModel, LoraModel, LoraConfig, get_peft_model, PeftConfig
 from peft import prepare_model_for_int8_training
 
+# wandb
+import wandb
+
 NEW_TOKEN_TO_ID = {
     "afr": 50327,
     "amh": 50334,
@@ -198,19 +201,23 @@ def prepare_dataset_whisper(batch, base_dir, feature_extractor, audio_feature_ke
     return batch
 
 def get_weight(processor, model, data_train, all=False):
-    weight = torch.zeros_like(model.detect_language_custom(torch.Tensor(data_train[0]["input_ids"]).unsqueeze(0).to("cuda"), all=all))
     if all:
         weights={}
+        final_weights = {}
         for key, value in NEW_TOKEN_TO_ID.items():
-            weights[value] = [weight, 0]
+            weights[value] = [torch.zeros(1, 51916).to("cuda"), 0]
         for batch in tqdm(data_train):
+            lang_id = batch["labels"][1]
             lang_distribution = model.detect_language_custom(torch.Tensor(batch["input_ids"]).unsqueeze(0).to("cuda"), all=True)
-            weights[batch["labels"][1]][0] += lang_distribution
-            weights[batch["labels"][1]][1] += 1
+            weights[lang_id][0] += lang_distribution
+            weights[lang_id][1] += 1
         for key, value in NEW_TOKEN_TO_ID.items():
-            weights[value] = weights[value][0] / weights[value][1]
+            final_weights[value] = weights[value][0] / weights[value][1]
             # weights[value] = weights[value][0] / 1
-        return weights
+        # print(max(final_weights[50259][0]))
+        # print(max(final_weights[51865][0]))
+        # print(torch.sum(final_weights[51865]-final_weights[50259]))
+        return final_weights
     else:
         for batch in data_train:
             lang_distribution = model.detect_language_custom(torch.Tensor(batch["input_ids"]).unsqueeze(0).to("cuda"))
@@ -248,39 +255,26 @@ def encode_dataset(batch, processor, all=False, phonemize=False, backend=None, s
 
 def save_model_state(model, processor: WhisperProcessor, output_dir):
     """
-    Save model state including tokenizer, embeddings and LoRA weights in one place.
-    
-    Args:
-        model: The Whisper_Modified model
-        processor: WhisperProcessor instance
-        output_dir: Directory to save everything
+    Save complete model state including base model weights, LoRA weights, tokenizer, and embeddings.
     """
-    
     os.makedirs(output_dir, exist_ok=True)
     
     # 1. Save the processor/tokenizer
     processor.save_pretrained(output_dir)
     
-    # 2. Save language embeddings if they exist
-    if hasattr(model, 'weight') and model.weight is not None:
-        torch.save({
-            'weight': model.weight,
-            'tokens_embed': model.tokens_embed
-        }, os.path.join(output_dir, 'language_embeddings.pt'))
+    torch.save(model.weight, os.path.join(output_dir, "language_weights.pt"))
+
+    # 3. Save the complete base model (includes proj_out and all other weights)
+    torch.save(model.base_model.proj_out.state_dict(), os.path.join(output_dir, "proj_out.pt"))
     
-    # 3. Save LoRA weights in the same directory
-    model.save_pretrained(output_dir)
+    # 4. Save LoRA weights
+    model.save_pretrained(os.path.join(output_dir, "adapter_model"))
+
 
 def load_model_state(output_dir):
     """
     Load the complete model state.
-    
-    Args:
-        output_dir: Directory where model was saved
-        model_class: Usually Whisper_Modified
-        processor_class: Usually WhisperProcessor
     """
-    
     # 1. Load processor/tokenizer
     processor = WhisperProcessor.from_pretrained(output_dir, task="transcribe")
     
@@ -290,15 +284,15 @@ def load_model_state(output_dir):
     if os.path.exists(embeddings_path):
         embeddings = torch.load(embeddings_path)
     
-    # 3. Initialize model with embeddings
+    # 3. Load the complete base model with all weights
     model = Whisper_Modified.from_pretrained(
-        pretrained_model_name_or_path=output_dir,
+        pretrained_model_name_or_path=os.path.join(output_dir, "base_model"),
         new_embedding=embeddings['weight'] if embeddings else None,
         language_tokens=embeddings['tokens_embed'] if embeddings else None
     )
     
-    # 4. Load LoRA weights
-    model = PeftModel.from_pretrained(model, output_dir)
+    # 4. Load and apply LoRA weights
+    model = PeftModel.from_pretrained(model, os.path.join(output_dir, "adapter_model"))
     
     return model, processor
 
@@ -321,12 +315,14 @@ class SavePeftModelCallback(TrainerCallback):
         return control
     
 class SaveAllCallback(TrainerCallback):
+    def __init__(self, processor):
+        self.processor = processor
     def on_save(self, args, state, control, **kwargs):
         checkpoint_folder = os.path.join(
             args.output_dir, 
             f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}"
         )
-        save_model_state(kwargs["model"], kwargs["processor"], checkpoint_folder)
+        save_model_state(kwargs["model"], self.processor, checkpoint_folder)
         return control
 
 def load_peft_model_from_hub(peft_model_id):
@@ -412,18 +408,17 @@ class Whisper_Modified(WhisperForConditionalGeneration):
         elif isinstance(new_embedding, dict):
             new_lang_tokens = {k: v for k, v in new_embedding.items() if int(k) >= 51865}
             init_tensor = torch.zeros((len(new_lang_tokens), len(new_lang_tokens[list(new_lang_tokens.keys())[0]])))
-            print(init_tensor.shape)
-            print(new_lang_tokens.keys())
+            # print(init_tensor.shape)
+            # print(new_lang_tokens.keys())
             first_key = list(new_lang_tokens.keys())[0]
-            print(f"First value length: {len(new_lang_tokens[first_key])}")
-            print(f"First key: {first_key}")
+            # print(f"First value length: {len(new_lang_tokens[first_key])}")
+            # print(f"First key: {first_key}")
             second_key = list(new_lang_tokens.keys())[1]
-            print(f"Second value length: {len(new_lang_tokens[second_key])}")
-            print(f"Second key: {second_key}")
-            print(f"A few first key values: {new_lang_tokens[first_key][:10]}")
-            print(f"A few secodn key values: {new_lang_tokens[second_key][:10]}")
+            # print(f"Second value length: {len(new_lang_tokens[second_key])}")
+            # print(f"Second key: {second_key}")
+            # print(f"A few first key values: {new_lang_tokens[first_key][:10]}")
+            # print(f"A few secodn key values: {new_lang_tokens[second_key][:10]}")
             for key, value in new_lang_tokens.items():
-                print(key)
                 init_tensor[int(key) - 51865] = torch.tensor(value).unsqueeze(0)
             self.weight = nn.Parameter(init_tensor)
             # init_tensor = torch.zeros((len(new_embedding.keys()), len(new_embedding[51865])))
@@ -565,7 +560,6 @@ class Whisper_Modified(WhisperForConditionalGeneration):
         
         return logits.softmax(-1)
 
-
 def experiment(input_arg, model, processor, data_collator, data_train, data_test, time, output_dir, weight):
     training_args = Seq2SeqTrainingArguments(
         do_eval=False,
@@ -577,7 +571,7 @@ def experiment(input_arg, model, processor, data_collator, data_train, data_test
         gradient_accumulation_steps=int(input_arg["grad_accum"]),
         eval_accumulation_steps=int(input_arg["grad_accum"]),
         evaluation_strategy="no",
-        save_strategy="no",
+        save_strategy="epoch",
         ddp_find_unused_parameters=True,
         resume_from_checkpoint=input_arg.get("checkpoint", False),
         overwrite_output_dir=input_arg.get("overwrite_output_dir", False),
@@ -590,7 +584,7 @@ def experiment(input_arg, model, processor, data_collator, data_train, data_test
         warmup_steps=input_arg.get("warmup_steps", 100),
         save_total_limit=input_arg.get("save_total_limit", 3),
         push_to_hub=False,
-        report_to="none",
+        report_to="wandb",
         weight_decay=input_arg.get("weight_decay", 0.02),
         remove_unused_columns=False,
         label_names=["labels"],
@@ -606,9 +600,9 @@ def experiment(input_arg, model, processor, data_collator, data_train, data_test
         data_collator=data_collator,
         args=training_args,
         train_dataset=data_train,
-        # eval_dataset=data_test,
+        eval_dataset=data_test,
         tokenizer=processor.feature_extractor,
-        callbacks=[SaveAllCallback],
+        callbacks=[SaveAllCallback(processor)],
     )
     model.config.use_cache = False  
 
@@ -616,7 +610,7 @@ def experiment(input_arg, model, processor, data_collator, data_train, data_test
     ###################
     #     Evaluate    #
     ###################
-    eval_dataloader = DataLoader(data_test, batch_size=int(input_arg["batch"]), collate_fn=data_collator)
+    eval_dataloader = DataLoader(data_test, batch_size=1, collate_fn=data_collator)
 
     model.eval()
     model = model.to("cuda")
@@ -676,6 +670,7 @@ def main(arg=None):
     input_arg["base_dir"] = base_dir
     dropout = input_arg.get("dropout", 0.0)
     all = input_arg.get("all", False)
+
 
     ############
     #  Model   #
@@ -770,6 +765,21 @@ def main(arg=None):
     model.config.suppress_tokens = []
     
     model.print_trainable_parameters()
+
+    wandb.init(
+        project="mlsuperb2-ftv1",  # Replace with your project name
+        name=f"whisper-{input_arg['size']}-{time}",
+        config={
+            "size": input_arg["size"],
+            "batch": input_arg["batch"],
+            "grad_accum": input_arg["grad_accum"],
+            "learning_rate": input_arg.get("learning_rate", 4.7e-5),
+            "weight_decay": input_arg.get("weight_decay", 0.02),
+            "epochs": input_arg.get("epoch", 5),
+            # Add any other hyperparameters you want to track
+        }
+    )
+
     model = experiment(
         input_arg,
         model,

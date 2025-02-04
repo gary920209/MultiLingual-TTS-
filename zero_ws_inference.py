@@ -40,9 +40,10 @@ from peft import LoraConfig, PeftModel, LoraModel, LoraConfig, get_peft_model, P
 from peft import prepare_model_for_int8_training
 
 import os
+import torch.nn as nn
 
-def prepare_dataset_whisper(batch, feature_extractor, audio_feature_key):
-    path = batch["path"]
+def prepare_dataset_whisper(batch, base_dir, feature_extractor, audio_feature_key):
+    path = os.path.join(base_dir, batch["path"])
     speech, sampling_rate = torchaudio.load(path)
     batch["raw_audio"] = speech.squeeze(0).numpy()
     if sampling_rate != "16_000" and sampling_rate != "16000" and sampling_rate != 16000:
@@ -104,7 +105,68 @@ def load_peft_model_from_hub(peft_model_id):
     return model
 
 
+def load_model_state(output_dir, size):
+    """
+    Load model state using base Whisper and saved components.
+    """
+    # 1. Load processor/tokenizer from base Whisper
+    processor = WhisperProcessor.from_pretrained(output_dir, task="transcribe")
+    
+    # 2. Load embeddings if they exist
+    embeddings_path = os.path.join(output_dir, 'language_embeddings.pt')
+    embeddings = None
+    # if os.path.exists(embeddings_path):
+    #     embeddings = torch.load(embeddings_path)
+    
+    # 3. Initialize model from base Whisper
+    try:
+        model = Whisper_Modified.from_pretrained(
+            f"openai/whisper-{size}",
+            new_embedding=embeddings['weight'] if embeddings else None,
+            language_tokens=embeddings['tokens_embed'] if embeddings else None,
+            ignore_mismatched_sizes=True  # Add this if there are size mismatches
+        )
+    except TypeError as e:
+        # If the above fails, try loading with minimal parameters
+        model = Whisper_Modified.from_pretrained(
+            f"openai/whisper-{size}",
+            new_embedding=embeddings['weight'] if embeddings else None,
+            language_tokens=embeddings['tokens_embed'] if embeddings else None
+        )
+    
+    model.resize_token_embeddings(len(processor.tokenizer))
+
+    # 4. Load saved proj_out weights
+    proj_out_path = os.path.join(output_dir, "proj_out.pt")
+    if os.path.exists(proj_out_path):
+        proj_out_state = torch.load(proj_out_path)
+        model.proj_out.load_state_dict(proj_out_state)
+    
+    # 5. Load and apply LoRA weights
+    model = PeftModel.from_pretrained(model, os.path.join(output_dir, "adapter_model"))
+    
+    return model, processor
+
 class Whisper_Modified(WhisperForConditionalGeneration):
+    def __init__(self, config: WhisperConfig, new_embedding: torch.Tensor=None, language_tokens: torch.Tensor=None):
+        super().__init__(config)
+        self.model = WhisperModel(config)
+        self.proj_out = nn.Linear(config.d_model, config.vocab_size, bias=False)
+        if new_embedding == None:
+            self.weight = None
+        elif isinstance(new_embedding, dict):
+            new_lang_tokens = {k: v for k, v in new_embedding.items() if int(k) >= 51865}
+            init_tensor = torch.zeros((len(new_lang_tokens), len(new_lang_tokens[list(new_lang_tokens.keys())[0]])))
+            for key, value in new_lang_tokens.items():
+                init_tensor[int(key) - 51865] = torch.tensor(value).unsqueeze(0)
+            self.weight = nn.Parameter(init_tensor)
+        else:
+            self.weight = nn.Parameter(torch.tensor(new_embedding))
+        self.tokens_embed = torch.tensor(language_tokens).to("cuda") if language_tokens is not None else None
+        
+        # Initialize weights and apply final processing
+        self.post_init()
+    
     def generate(
         self,
         input_features: Optional[torch.Tensor] = None,
@@ -598,13 +660,15 @@ def main(arg=None):
     input_arg["model_config"] = f"openai/whisper-{size}"
     input_arg["group_by_length"] = True
     input_arg["cache_dir"] = "~/.cache"
+    base_dir = input_arg.get("base_dir", "data/mlsuperb2")
     dropout = input_arg.get("dropout", 0.0)
 
     corpus_wise = input_arg.get("corpus_wise", False)
     ############
     #  Model   #
     ############
-
+    
+    # model, processor = load_model_state(input_arg["checkpoint"])
     processor = WhisperProcessor.from_pretrained(
         input_arg["model_config"], task="transcribe", dropout=dropout, language=None
     )
@@ -612,14 +676,14 @@ def main(arg=None):
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor, audio_feature_key=audio_feature_key)
 
     # load from base model
-    model = Whisper_Modified.from_pretrained(input_arg["model_config"])
-    config = LoraConfig(r=32, lora_alpha=64, target_modules=["q_proj", "v_proj"], lora_dropout=0.05, bias="none")
-    model = get_peft_model(model, config)
-       
-    model = model.to("cuda")
+    model, processor = load_model_state(input_arg["checkpoint"], size)
     
+    model = model.to("cuda")
     model.config.forced_decoder_ids = None
     model.config.suppress_tokens = []
+    
+    audio_feature_key = "input_ids"
+    data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor, audio_feature_key=audio_feature_key)
     
     model.print_trainable_parameters()
     
@@ -639,13 +703,13 @@ def main(arg=None):
         cache_dir=input_arg["cache_dir"],
         # cache_dir=None,
     )
-    dataset_test = dataset_test.filter(lambda e: nlp2.is_file_exist(e["path"]))
+    dataset_test = dataset_test.filter(lambda e: nlp2.is_file_exist(os.path.join(base_dir, e["path"])))
     data_test = dataset_test["train"]
 
     data_test = data_test.map(
         prepare_dataset_whisper,
         num_proc=1,
-        fn_kwargs={"feature_extractor": processor.feature_extractor, "audio_feature_key": audio_feature_key},
+        fn_kwargs={"base_dir": base_dir, "feature_extractor": processor.feature_extractor, "audio_feature_key": audio_feature_key},
     )
 
     if not corpus_wise:
