@@ -220,7 +220,9 @@ def get_weight(processor, model, data_train, all=False):
         return final_weights
     else:
         for batch in data_train:
-            lang_distribution = model.detect_language_custom(torch.Tensor(batch["input_ids"]).unsqueeze(0).to("cuda"))
+            lang_distribution = model.detect_language_custom(torch.Tensor(batch["input_ids"]).unsqueeze(0))
+            # lang_distribution = model.detect_language_custom(torch.Tensor(batch["input_ids"]).unsqueeze(0).to("cuda"))
+
             weight += lang_distribution
         weight /= len(data_train)
         return weight
@@ -427,8 +429,8 @@ class Whisper_Modified(WhisperForConditionalGeneration):
             # self.weight = nn.Parameter(init_tensor)
         else:
             self.weight = nn.Parameter(torch.tensor(new_embedding))
-        self.tokens_embed = torch.tensor(language_tokens).to("cuda") if language_tokens is not None else None
-
+        # self.tokens_embed = torch.tensor(language_tokens).to("cuda") if language_tokens is not None else None
+        self.tokens_embed = torch.tensor(language_tokens) if language_tokens is not None else None
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -613,7 +615,8 @@ def experiment(input_arg, model, processor, data_collator, data_train, data_test
     eval_dataloader = DataLoader(data_test, batch_size=1, collate_fn=data_collator)
 
     model.eval()
-    model = model.to("cuda")
+    model = model
+    # model = model.to("cuda")
     label_list = []
     pred_list = []
     pred_results = []
@@ -697,7 +700,7 @@ def main(arg=None):
     model = get_peft_model(model, config)
     model.resize_token_embeddings(len(processor.tokenizer))
 
-    model = model.to("cuda")
+#    model = model.to("cuda")
     
     model.config.forced_decoder_ids = None
     model.config.suppress_tokens = []
@@ -759,7 +762,7 @@ def main(arg=None):
     model = get_peft_model(model, config)
     model.resize_token_embeddings(len(processor.tokenizer))
 
-    model = model.to("cuda")
+#    model = model.to("cuda")
     
     model.config.forced_decoder_ids = None
     model.config.suppress_tokens = []

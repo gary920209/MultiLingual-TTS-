@@ -9,8 +9,8 @@ python3 new_ws_finetune.py \
     --batch 1 \
     --grad_accum 8 \
     --epoch 5 \
-    --custom_set_train $dir/train_10min.csv \
-    --custom_set_test $dir/test_30.csv \
+    --custom_set_train train_10min.csv \
+    --custom_set_test test_30.csv \
     --all \
     --output_dir $output_dir > $output_dir/output.log \
     --base_dir data/mlsuperb2
