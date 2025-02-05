@@ -1,6 +1,8 @@
 import copy
 import json
 import sys
+import unicodedata
+import re
 
 import nlp2
 from datasets import load_dataset
@@ -41,6 +43,148 @@ from peft import prepare_model_for_int8_training
 
 import os
 import torch.nn as nn
+
+NEW_TOKEN_TO_ID = {
+    "afr": 50327,
+    "amh": 50334,
+    "ara": 50272,
+    "hye": 50312,
+    "asm": 50350,
+    "aze": 50304,
+    "bak": 50355,
+    "eus": 50310,
+    "bel": 50330,
+    "ben": 50302,
+    "bos": 50315,
+    "bre": 50309,
+    "bul": 50292,
+    "mya": 50346,
+    "cat": 50270,
+    "hrv": 50291,
+    "ces": 50283,
+    "dan": 50285,
+    "nld": 50271,
+    "eng": 50259,
+    "est": 50307,
+    "fin": 50277,
+    "fra": 50265,
+    "glg": 50319,
+    "kat": 50329,
+    "deu": 50261,
+    "guj": 50333,
+    "hat": 50339,
+    "hau": 50354,
+    "heb": 50279,
+    "hin": 50276,
+    "hun": 50286,
+    "isl": 50311,
+    "ind": 50275,
+    "ita": 50274,
+    "jpn": 50266,
+    "kan": 50306,
+    "kaz": 50316,
+    "khm": 50323,
+    "kor": 50264,
+    "lao": 50336,
+    "lav": 50301,
+    "lin": 50353,
+    "lit": 50293,
+    "ltz": 50345,
+    "mkd": 50308,
+    "msa": 50282,
+    "mal": 50296,
+    "mlt": 50343,
+    "mri": 50295,
+    "mar": 50320,
+    "ell": 50281,
+    "mon": 50314,
+    "nep": 50313,
+    "oci": 50328,
+    "pan": 50321,
+    "fas": 50300,
+    "pol": 50269,
+    "por": 50267,
+    "pus": 50340,
+    "ron": 50284,
+    "rus": 50263,
+    "srp": 50303,
+    "sna": 50324,
+    "snd": 50332,
+    "sin": 50322,
+    "slk": 50298,
+    "slv": 50305,
+    "som": 50326,
+    "spa": 50262,
+    "sun": 50357,
+    "swa": 50318,
+    "swe": 50273,
+    "fil": 50348,
+    "tgk": 50331,
+    "tam": 50287,
+    "tat": 50351,
+    "tel": 50299,
+    "tha": 50289,
+    "tur": 50268,
+    "ukr": 50280,
+    "urd": 50290,
+    "uzb": 50337,
+    "vie": 50278,
+    "cym": 50297,
+    "yor": 50325,
+    "jav": 50356,
+    "cmn": 50260,
+    "abk": 51865,
+    "ast": 51866,
+    "bas": 51867,
+    "ceb": 51868,
+    "ckb": 51869,
+    "chv": 51870,
+    "div": 51871,
+    "mhr": 51872,
+    "myv": 51873,
+    "epo": 51874,
+    "ful": 51875,
+    "lug": 51876,
+    "grn": 51877,
+    "cnh": 51878,
+    "azz": 51879,
+    "tos": 51880,
+    "ibo": 51881,
+    "ina": 51882,
+    "gle": 51883,
+    "kea": 51884,
+    "kab": 51885,
+    "kam": 51886,
+    "kin": 51887,
+    "kir": 51888,
+    "lga": 51889,
+    "luo": 51890,
+    "nan": 51891,
+    "frr": 51892,
+    "kmr": 51893,
+    "nya": 51894,
+    "ori": 51895,
+    "orm": 51896,
+    "nso": 51897,
+    "skr": 51898,
+    "nbl": 51899,
+    "sot": 51900,
+    "ssw": 51901,
+    "tok": 51902,
+    "tso": 51903,
+    "tsn": 51904,
+    "uig": 51905,
+    "umb": 51906,
+    "hsb": 51907,
+    "ven": 51908,
+    "mrj": 51909,
+    "wol": 51910,
+    "xho": 51911,
+    "sah": 51912,
+    "xty": 51913,
+    "yue": 51914,
+    "zul": 51915
+}
 
 def prepare_dataset_whisper(batch, base_dir, feature_extractor, audio_feature_key):
     path = os.path.join(base_dir, batch["path"])
@@ -146,6 +290,33 @@ def load_model_state(output_dir, size):
     model = PeftModel.from_pretrained(model, os.path.join(output_dir, "adapter_model"))
     
     return model, processor
+
+
+def remove_punctuation(sentence):
+    new_sentence = ""
+    for char in sentence:
+        # all unicode punctuation is of type P
+        if unicodedata.category(char).startswith('P'):
+            continue
+        else:
+            new_sentence = f"{new_sentence}{char}"
+    return new_sentence
+
+def normalize_text(text, lang):
+    # Determine if we should remove spaces based on language
+    remove_spaces = lang in ['cmn', 'jpn', 'tha']  # Chinese, Japanese, Thai
+    
+    # Remove spaces if needed
+    if remove_spaces:
+        text = re.sub(r"\s", "", text)
+    
+    # Remove punctuation
+    text = remove_punctuation(text)
+    
+    # Convert to uppercase
+    text = text.upper()
+    
+    return text
 
 class Whisper_Modified(WhisperForConditionalGeneration):
     def __init__(self, config: WhisperConfig, new_embedding: torch.Tensor=None, language_tokens: torch.Tensor=None):
@@ -597,7 +768,7 @@ def experiment(input_arg, model, processor, lid_model, lid_processor, data_colla
         with torch.no_grad():
             # TODO: Add language identification if there isn't language information
             
-            pred_lang = language_identification(
+            pred_lang, prob = language_identification(
                 batch["raw_audio"].to("cuda"), 
                 16000, 
                 lid_processor, 
@@ -608,6 +779,15 @@ def experiment(input_arg, model, processor, lid_model, lid_processor, data_colla
                 lang_distribution = weight.squeeze()
             else:
                 lang_distribution = model.detect_language_custom(input_features=batch["input_features"].to("cuda")).squeeze()
+            
+            # Add the force-scaling logic
+            if prob > 0.9 and NEW_TOKEN_TO_ID[pred_lang] < 51865:
+                # Create a zero tensor with the same shape as lang_distribution
+                new_distribution = torch.zeros_like(lang_distribution)
+                # Set the predicted language's probability to 1.0
+                new_distribution[NEW_TOKEN_TO_ID[pred_lang]] = 1.0
+                lang_distribution = new_distribution
+            
             generated_tokens = (
                 model.generate(
                     input_features=batch["input_features"].to("cuda"),
@@ -625,6 +805,8 @@ def experiment(input_arg, model, processor, lid_model, lid_processor, data_colla
             generated_tokens = torch.from_numpy(generated_tokens)
             pred_str = processor.tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
             label_str = processor.tokenizer.batch_decode(labels, skip_special_tokens=True)
+
+            pred_str = [normalize_text(s, batch["lid"]) for s in pred_str]
 
             pred_result = [[l, p, cer_cal([l], [p]), true_lid, pred_lid] for l, p, true_lid, pred_lid in zip(label_str, pred_str, batch["lid"], pred_lang)]
             pred_results += pred_result
@@ -734,4 +916,5 @@ def main(arg=None):
 
 if __name__ == "__main__":
     main()
+
 

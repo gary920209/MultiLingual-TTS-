@@ -19,10 +19,12 @@ def language_identification(audio, sr, processor, model: Wav2Vec2ForSequenceClas
         sr: Sample rate
         processor: Initialized AutoFeatureExtractor
         model: Initialized Wav2Vec2ForSequenceClassification
-        LANG_LIST: List of candidate languages in ISO 639-2/3 format (e.g., ['eng', 'jpn', ...])
+        lang_list: List of candidate languages in ISO 639-3 format (e.g., ['eng', 'jpn', ...])
     
     Returns:
-        detected_lang: Most likely language from LANG_LIST
+        tuple: (detected_lang, probability)
+            - detected_lang (str): Most likely language from lang_list in ISO 639-3 format
+            - probability (float): Confidence score for the detected language
     """
     
     inputs = processor(audio, sampling_rate=sr, return_tensors="pt")
@@ -33,17 +35,18 @@ def language_identification(audio, sr, processor, model: Wav2Vec2ForSequenceClas
     # Get probabilities for all languages
     probs = torch.nn.functional.softmax(outputs, dim=-1)[0]
     
-    # Filter probabilities to only include languages in LANG_LIST
-    filtered_probs = {}
-    for i, label in model.config.id2label.items():
-        if label in lang_list:
-            filtered_probs[label] = probs[i].item()
+    # Filter and normalize probabilities to only include languages in lang_list
+    filtered_probs = {label: probs[i].item() for i, label in model.config.id2label.items() 
+                     if label in lang_list}
     
-    # Get the most likely language from the filtered list
-    detected_lang = max(filtered_probs.items(), key=lambda x: x[1])
+    # Normalize probabilities to sum to 1 across filtered languages
+    prob_sum = sum(filtered_probs.values())
+    filtered_probs = {k: v/prob_sum for k, v in filtered_probs.items()}
     
+    # Get the most likely language and its probability
+    detected_lang, prob = max(filtered_probs.items(), key=lambda x: x[1])
     
-    return detected_lang
+    return detected_lang, prob
 
 
 if __name__ == "__main__":
@@ -101,3 +104,4 @@ if __name__ == "__main__":
     sorted_lang_accuracy = {k: v for k, v in sorted(lang_accuracy.items(), key=lambda item: item[1], reverse=True)}
     for lang, acc in sorted_lang_accuracy.items():
         print(f"{lang}: {acc}")
+
