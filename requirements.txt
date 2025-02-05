@@ -25,4 +25,14 @@ transformers==4.39.1
 wandb==0.16.2
 zhon==2.0.2
 accelerate
-peft==0.4.0
+peft==0.4.
+fastapi
+mangum
+pydantic
+python-dotenv
+typing-extensions
+uvicorn
+jwt
+espnet-model-zoo
+s3prl
+
