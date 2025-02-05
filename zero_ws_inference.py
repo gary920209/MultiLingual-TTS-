@@ -781,7 +781,7 @@ def experiment(input_arg, model, processor, lid_model, lid_processor, data_colla
                 lang_distribution = model.detect_language_custom(input_features=batch["input_features"].to("cuda")).squeeze()
             
             # Add the force-scaling logic
-            if prob > 0.9 and NEW_TOKEN_TO_ID[pred_lang] < 51865:
+            if False:
                 # Create a zero tensor with the same shape as lang_distribution
                 new_distribution = torch.zeros_like(lang_distribution)
                 # Set the predicted language's probability to 1.0
