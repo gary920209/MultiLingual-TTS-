@@ -809,7 +809,7 @@ class ModelController:
         """Load the modified Whisper model with LoRA adapters"""
         # Load base Whisper model
         model = Whisper_Modified.from_pretrained(
-            "openai/whisper-large-v2",  # 替換成你的基礎模型大小
+            "openai/whisper-large-v3", 
             ignore_mismatched_sizes=True
         )
         
