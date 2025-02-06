@@ -65,7 +65,7 @@ import os
 import copy
 import unicodedata
 import re
-from torch.nn import CrossEntropyLoss
+import torch.nn  as nn
 from transformers.modeling_outputs import (
     BaseModelOutput, 
     Seq2SeqLMOutput, 
@@ -782,7 +782,7 @@ class Whisper_Modified(WhisperForConditionalGeneration):
             }
 
 class ModelController:
-    def __init__(self, model_id: str = "path_to_my_checkpoint", device: str = "cuda" if torch.cuda.is_available() else "cpu") -> None:
+    def __init__(self, model_id: str = "/Users/garylee/Desktop/project/MLSUPERB2-Challenge/submit/checkpoint-14710", device: str = "cuda" if torch.cuda.is_available() else "cpu") -> None:
         self.initialized = True
         self.device = device
         self.sample_rate = 16000 # Whisper uses 16kHz
@@ -873,7 +873,7 @@ class ModelController:
 
         # Process audio features
         features = self.processor(
-            audio, 
+            audio.cpu().numpy(),  
             sampling_rate=self.sample_rate, 
             return_tensors="pt"
         ).input_features.to(self.device)
