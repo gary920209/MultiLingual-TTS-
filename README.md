@@ -1,4 +1,4 @@
-# Weghted Sum Embedding as Initialization for Inference and Finetuning of Whisper
+# MultiLingual-TTS
 
 ## Installation
 Use the exact version of the packages in the ``requirements.txt``.
